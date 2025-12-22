@@ -136,8 +136,12 @@ export class Renderer {
                 const height = entry.contentBoxSize[0].blockSize;
                 // Force size to be non-zero
                 if (width > 0 && height > 0) {
-                    this.canvas.width = Math.max(1, Math.min(width, this.device.limits.maxTextureDimension2D));
-                    this.canvas.height = Math.max(1, Math.min(height, this.device.limits.maxTextureDimension2D));
+                    const dpr = window.devicePixelRatio || 1;
+                    const displayWidth = Math.floor(width * dpr);
+                    const displayHeight = Math.floor(height * dpr);
+
+                    this.canvas.width = Math.max(1, Math.min(displayWidth, this.device.limits.maxTextureDimension2D));
+                    this.canvas.height = Math.max(1, Math.min(displayHeight, this.device.limits.maxTextureDimension2D));
                     this.resetAccumulation();
                 }
             }
