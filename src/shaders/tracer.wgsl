@@ -267,13 +267,13 @@ fn hit_world(r: Ray, t_min: f32, t_max: f32) -> HitRecord {
     let c_min = vec3f(-0.7, 0.1, -0.6);
     let c_max = vec3f(-0.1, 0.7, 0.0);
     
-    let orange_glass = vec3f(1.0, 0.5, 0.0); // Orange Tint
+    let orange_glass = vec3f(1.0, 0.85, 0.4); // Lighter Orange Tint
 
     // Front Face (z = c_max.z)
     let q1 = hit_quad(
         vec3f(c_min.x, c_min.y, c_max.z), vec3f(c_max.x, c_min.y, c_max.z), 
         vec3f(c_max.x, c_max.y, c_max.z), vec3f(c_min.x, c_max.y, c_max.z),
-        orange_glass, vec3f(0.0), 0.2, 0.0, 1.0, 1.5, r, t_min, t_max, closest_so_far
+        orange_glass, vec3f(0.0), 0.4, 0.0, 1.0, 1.5, r, t_min, t_max, closest_so_far
     );
     if (q1.matched) { closest_so_far = q1.t; final_rec = q1; }
 
@@ -281,7 +281,7 @@ fn hit_world(r: Ray, t_min: f32, t_max: f32) -> HitRecord {
     let q2 = hit_quad(
         vec3f(c_min.x, c_min.y, c_min.z), vec3f(c_min.x, c_max.y, c_min.z),
         vec3f(c_max.x, c_max.y, c_min.z), vec3f(c_max.x, c_min.y, c_min.z),
-        orange_glass, vec3f(0.0), 0.2, 0.0, 1.0, 1.5, r, t_min, t_max, closest_so_far
+        orange_glass, vec3f(0.0), 0.4, 0.0, 1.0, 1.5, r, t_min, t_max, closest_so_far
     );
     if (q2.matched) { closest_so_far = q2.t; final_rec = q2; }
 
@@ -289,7 +289,7 @@ fn hit_world(r: Ray, t_min: f32, t_max: f32) -> HitRecord {
     let q3 = hit_quad(
         vec3f(c_max.x, c_min.y, c_max.z), vec3f(c_max.x, c_min.y, c_min.z),
         vec3f(c_max.x, c_max.y, c_min.z), vec3f(c_max.x, c_max.y, c_max.z),
-        orange_glass, vec3f(0.0), 0.2, 0.0, 1.0, 1.5, r, t_min, t_max, closest_so_far
+        orange_glass, vec3f(0.0), 0.4, 0.0, 1.0, 1.5, r, t_min, t_max, closest_so_far
     );
     if (q3.matched) { closest_so_far = q3.t; final_rec = q3; }
 
@@ -297,7 +297,7 @@ fn hit_world(r: Ray, t_min: f32, t_max: f32) -> HitRecord {
     let q4 = hit_quad(
         vec3f(c_min.x, c_min.y, c_max.z), vec3f(c_min.x, c_max.y, c_max.z),
         vec3f(c_min.x, c_max.y, c_min.z), vec3f(c_min.x, c_min.y, c_min.z),
-        orange_glass, vec3f(0.0), 0.2, 0.0, 1.0, 1.5, r, t_min, t_max, closest_so_far
+        orange_glass, vec3f(0.0), 0.4, 0.0, 1.0, 1.5, r, t_min, t_max, closest_so_far
     );
     if (q4.matched) { closest_so_far = q4.t; final_rec = q4; }
 
@@ -305,7 +305,7 @@ fn hit_world(r: Ray, t_min: f32, t_max: f32) -> HitRecord {
     let q5 = hit_quad(
         vec3f(c_min.x, c_max.y, c_max.z), vec3f(c_max.x, c_max.y, c_max.z),
         vec3f(c_max.x, c_max.y, c_min.z), vec3f(c_min.x, c_max.y, c_min.z),
-        orange_glass, vec3f(0.0), 0.2, 0.0, 1.0, 1.5, r, t_min, t_max, closest_so_far
+        orange_glass, vec3f(0.0), 0.4, 0.0, 1.0, 1.5, r, t_min, t_max, closest_so_far
     );
     if (q5.matched) { closest_so_far = q5.t; final_rec = q5; }
 
@@ -313,7 +313,7 @@ fn hit_world(r: Ray, t_min: f32, t_max: f32) -> HitRecord {
     let q6 = hit_quad(
         vec3f(c_min.x, c_min.y, c_max.z), vec3f(c_min.x, c_min.y, c_min.z),
         vec3f(c_max.x, c_min.y, c_min.z), vec3f(c_max.x, c_min.y, c_max.z),
-        orange_glass, vec3f(0.0), 0.2, 0.0, 1.0, 1.5, r, t_min, t_max, closest_so_far
+        orange_glass, vec3f(0.0), 0.4, 0.0, 1.0, 1.5, r, t_min, t_max, closest_so_far
     );
     if (q6.matched) { closest_so_far = q6.t; final_rec = q6; }
 
@@ -448,8 +448,7 @@ fn ray_color(r_in: Ray) -> vec3f {
                     let sin_theta = sqrt(1.0 - cos_theta*cos_theta);
                      if (refraction_ratio * sin_theta > 1.0) {
                          // Must Reflect (TIR)
-                         scatter_dir = reflect(r.direction, real_normal); // or h?
-                         // Ideally use h, but keep it simple
+                         scatter_dir = reflect(r.direction, h); 
                      } else {
                          // Refract
                          // Use h instead of real_normal for frosted effect
