@@ -10,6 +10,15 @@ struct Sphere {
     radius: f32,
     color: vec3f,
     emission: vec3f,
+    materialType: u32, // 0: Lambertian, 1: Metal, 2: Dielectric
+};
+
+struct Triangle {
+    v0: vec3f,
+    v1: vec3f,
+    v2: vec3f,
+    color: vec3f,
+    emission: vec3f,
 };
 
 struct HitRecord {
@@ -100,6 +109,75 @@ fn hit_sphere(s: Sphere, r: Ray, t_min: f32, t_max: f32) -> HitRecord {
     return rec;
 }
 
+fn hit_triangle(tri: Triangle, r: Ray, t_min: f32, t_max: f32) -> HitRecord {
+    var rec: HitRecord;
+    rec.matched = false;
+
+    let v0v1 = tri.v1 - tri.v0;
+    let v0v2 = tri.v2 - tri.v0;
+    let pvec = cross(r.direction, v0v2);
+    let det = dot(v0v1, pvec);
+
+    // Backface culling if desired, but for cornell box walls we want two-sided or correct normals
+    // if det is near zero, parallel
+    if (abs(det) < 0.00001) { return rec; }
+
+    let inv_det = 1.0 / det;
+    let tvec = r.origin - tri.v0;
+    let u = dot(tvec, pvec) * inv_det;
+
+    if (u < 0.0 || u > 1.0) { return rec; }
+
+    let qvec = cross(tvec, v0v1);
+    let v = dot(r.direction, qvec) * inv_det;
+
+    if (v < 0.0 || u + v > 1.0) { return rec; }
+
+    let t = dot(v0v2, qvec) * inv_det;
+
+    if (t < t_min || t >= t_max) { return rec; }
+
+    rec.t = t;
+    rec.p = r.origin + r.direction * rec.t;
+    // Normal:
+    // For single sided: cross(v0v1, v0v2)
+    // We want normal to face the ray
+    var normal = normalize(cross(v0v1, v0v2));
+    if (dot(normal, r.direction) > 0.0) {
+        normal = -normal;
+    }
+    rec.normal = normal;
+    
+    rec.matched = true;
+    rec.color = tri.color;
+    rec.emission = tri.emission;
+    return rec;
+}
+
+fn hit_quad(v0: vec3f, v1: vec3f, v2: vec3f, v3: vec3f, color: vec3f, emission: vec3f, r: Ray, t_min: f32, t_max: f32, closest_so_far: f32) -> HitRecord {
+    // Quad defined by v0, v1, v2, v3 (CCW or CW).
+    // Split into two triangles: v0-v1-v2 and v0-v2-v3
+    var final_rec: HitRecord;
+    final_rec.matched = false;
+    var current_closest = closest_so_far;
+
+    let t1 = Triangle(v0, v1, v2, color, emission);
+    let rec1 = hit_triangle(t1, r, t_min, current_closest);
+    if (rec1.matched) {
+        final_rec = rec1;
+        current_closest = rec1.t;
+    }
+
+    let t2 = Triangle(v0, v2, v3, color, emission);
+    let rec2 = hit_triangle(t2, r, t_min, current_closest);
+    if (rec2.matched) {
+        final_rec = rec2;
+    }
+    
+    return final_rec;
+}
+
+
 // Scene Helper
 fn hit_world(r: Ray, t_min: f32, t_max: f32) -> HitRecord {
     var hit_anything = false;
@@ -108,32 +186,75 @@ fn hit_world(r: Ray, t_min: f32, t_max: f32) -> HitRecord {
     final_rec.matched = false;
 
     // Hardcoded Scene
-    // 1. Center Sphere
-    let s1 = Sphere(vec3f(0.0, 0.0, 0.0), 1.0, vec3f(0.5, 0.1, 0.1), vec3f(0.0)); // Reddish
-    let rec1 = hit_sphere(s1, r, t_min, closest_so_far);
-    if (rec1.matched) {
-        hit_anything = true;
-        closest_so_far = rec1.t;
-        final_rec = rec1;
-    }
-
-    // 2. Ground Sphere (huge)
-    let s2 = Sphere(vec3f(0.0, -100.5, 0.0), 100.0, vec3f(0.5, 0.8, 0.5), vec3f(0.0)); // Greenish ground
-    let rec2 = hit_sphere(s2, r, t_min, closest_so_far);
-    if (rec2.matched) {
-        hit_anything = true;
-        closest_so_far = rec2.t;
-        final_rec = rec2;
-    }
+    // Cornell Box Scene
+    // Scale: -1 to 1 in X, 0 to 2 in Y, -1 to 1 in Z
     
-    // 3. Light Sphere
-    let s3 = Sphere(vec3f(0.0, 1.5, 0.0), 0.5, vec3f(0.0, 0.0, 0.0), vec3f(10.0, 10.0, 10.0)); // Bright white light
-    let rec3 = hit_sphere(s3, r, t_min, closest_so_far);
-    if (rec3.matched) {
-        hit_anything = true;
-        closest_so_far = rec3.t;
-        final_rec = rec3;
-    }
+    // Materials
+    let red = vec3f(0.65, 0.05, 0.05);
+    let white = vec3f(0.73, 0.73, 0.73);
+    let green = vec3f(0.12, 0.45, 0.15);
+    let light = vec3f(15.0, 15.0, 15.0);
+    
+    // Geometry
+    
+    // Floor (y=0)
+    // v0(-1,0,1), v1(1,0,1), v2(1,0,-1), v3(-1,0,-1)
+    let rec_floor = hit_quad(
+        vec3f(-1.0, 0.0, 1.0), vec3f(1.0, 0.0, 1.0), vec3f(1.0, 0.0, -1.0), vec3f(-1.0, 0.0, -1.0),
+        white, vec3f(0.0), r, t_min, t_max, closest_so_far
+    );
+    if (rec_floor.matched) { closest_so_far = rec_floor.t; final_rec = rec_floor; }
+    
+    // Ceiling (y=2)
+    let rec_ceil = hit_quad(
+        vec3f(-1.0, 2.0, -1.0), vec3f(1.0, 2.0, -1.0), vec3f(1.0, 2.0, 1.0), vec3f(-1.0, 2.0, 1.0),
+        white, vec3f(0.0), r, t_min, t_max, closest_so_far
+    );
+    if (rec_ceil.matched) { closest_so_far = rec_ceil.t; final_rec = rec_ceil; }
+    
+    // Back Wall (z=-1)
+    let rec_back = hit_quad(
+        vec3f(-1.0, 0.0, -1.0), vec3f(1.0, 0.0, -1.0), vec3f(1.0, 2.0, -1.0), vec3f(-1.0, 2.0, -1.0),
+        white, vec3f(0.0), r, t_min, t_max, closest_so_far
+    );
+    if (rec_back.matched) { closest_so_far = rec_back.t; final_rec = rec_back; }
+    
+    // Left Wall (x=-1) - Red
+    let rec_left = hit_quad(
+        vec3f(-1.0, 0.0, 1.0), vec3f(-1.0, 0.0, -1.0), vec3f(-1.0, 2.0, -1.0), vec3f(-1.0, 2.0, 1.0),
+        red, vec3f(0.0), r, t_min, t_max, closest_so_far
+    );
+    if (rec_left.matched) { closest_so_far = rec_left.t; final_rec = rec_left; }
+    
+    // Right Wall (x=1) - Green
+    let rec_right = hit_quad(
+        vec3f(1.0, 0.0, -1.0), vec3f(1.0, 0.0, 1.0), vec3f(1.0, 2.0, 1.0), vec3f(1.0, 2.0, -1.0),
+        green, vec3f(0.0), r, t_min, t_max, closest_so_far
+    );
+    if (rec_right.matched) { closest_so_far = rec_right.t; final_rec = rec_right; }
+    
+    // Light (Ceiling patch)
+    let light_size = 0.5;
+    let rec_light = hit_quad(
+        vec3f(-light_size/2.0, 1.99, -light_size/2.0), vec3f(light_size/2.0, 1.99, -light_size/2.0),
+        vec3f(light_size/2.0, 1.99, light_size/2.0), vec3f(-light_size/2.0, 1.99, light_size/2.0),
+        vec3f(0.0), light, r, t_min, t_max, closest_so_far
+    );
+    if (rec_light.matched) { closest_so_far = rec_light.t; final_rec = rec_light; }
+
+    // Sphere 1 (Mirror-like)
+    let s1 = Sphere(vec3f(-0.4, 0.4, -0.3), 0.4, vec3f(0.9, 0.9, 0.9), vec3f(0.0), 0u); 
+    // Just putting generic spheres back for now, we don't have materials implemented well yet in hit_world structs fully
+    // but the Sphere struct was updated earlier to have materialType, but the Sphere struct in hit_world was using the old def.
+    // Wait, the Sphere definition in line 111 needs to be updated.
+    
+    let rec_s1 = hit_sphere(s1, r, t_min, closest_so_far);
+    if (rec_s1.matched) { closest_so_far = rec_s1.t; final_rec = rec_s1; }
+
+    // Sphere 2
+    let s2 = Sphere(vec3f(0.4, 0.4, 0.3), 0.4, vec3f(0.2, 0.2, 0.8), vec3f(0.0), 0u);
+    let rec_s2 = hit_sphere(s2, r, t_min, closest_so_far);
+    if (rec_s2.matched) { closest_so_far = rec_s2.t; final_rec = rec_s2; }
     
     return final_rec;
 }

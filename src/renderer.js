@@ -6,7 +6,7 @@ export class Renderer {
         this.device = null;
         this.context = null;
         this.frameIndex = 0;
-        this.raysPerFrame = 200;
+        this.raysPerFrame = 25;
         this.totalSamples = 0;
 
         // Pipelines and resources
@@ -188,8 +188,9 @@ export class Renderer {
         const uniforms = new Float32Array(this.uniformBufferSize / 4);
 
         // Setup Camera looking at origin
-        const camPos = new Vector3(0, 1.5, 4.0);
-        const target = new Vector3(0, 0, 0);
+        // Box center is approx (0, 1, 0)
+        const camPos = new Vector3(0, 1.0, 2.4);
+        const target = new Vector3(0, 1.0, 0);
         const up = new Vector3(0, 1, 0);
 
         let fwd = Vector3.sub(target, camPos);
