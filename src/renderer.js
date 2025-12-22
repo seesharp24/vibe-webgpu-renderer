@@ -6,6 +6,8 @@ export class Renderer {
         this.device = null;
         this.context = null;
         this.frameIndex = 0;
+        this.raysPerFrame = 200;
+        this.totalSamples = 0;
 
         // Pipelines and resources
         this.computePipeline = null;
@@ -145,6 +147,7 @@ export class Renderer {
         if (!this.device || this.canvas.width === 0 || this.canvas.height === 0) return;
 
         this.frameIndex = 0;
+        this.totalSamples = 0;
 
         if (this.storageTextureA) this.storageTextureA.destroy();
         if (this.storageTextureB) this.storageTextureB.destroy();
@@ -214,10 +217,12 @@ export class Renderer {
         // resolution: 64 (align 8) -> Index 16
 
         const frameIndView = new Uint32Array(uniforms.buffer);
-        frameIndView[15] = this.frameIndex;
+        frameIndView[15] = this.totalSamples;
         // Resolution
         uniforms[16] = this.canvas.width;
         uniforms[17] = this.canvas.height;
+        // Rays Per Frame
+        frameIndView[18] = this.raysPerFrame;
 
         this.device.queue.writeBuffer(this.uniformBuffer, 0, uniforms);
     }
@@ -269,9 +274,10 @@ export class Renderer {
 
         // Debug Log
         if (this.frameIndex % 60 === 0) {
-            console.log("Rendering Frame: ", this.frameIndex, "Size:", this.canvas.width, this.canvas.height);
+            console.log("Rendering Frame: ", this.frameIndex, "Total Samples:", this.totalSamples, "Size:", this.canvas.width, this.canvas.height);
         }
 
         this.frameIndex++;
+        this.totalSamples += this.raysPerFrame;
     }
 }

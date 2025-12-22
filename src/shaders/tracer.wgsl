@@ -28,6 +28,7 @@ struct SceneUniforms {
     cameraUp: vec3f,
     frameCount: u32,
     resolution: vec2f,
+    raysPerFrame: u32,
 };
 
 @group(0) @binding(0) var<uniform> scene: SceneUniforms;
@@ -203,8 +204,30 @@ fn main(@builtin(global_invocation_id) global_id: vec3u) {
     let ray_origin = scene.cameraPosition;
     let ray_direction = normalize(lower_left_corner + u*horizontal + v*vertical - ray_origin);
     
-    let r = Ray(ray_origin, ray_direction);
-    var pixel_color = ray_color(r);
+    let r_base = Ray(ray_origin, ray_direction);
+    
+    // Multi-sample loop
+    var accumulated_color = vec3f(0.0);
+    for (var i = 0u; i < scene.raysPerFrame; i++) {
+        // Init RNG for each sub-sample
+        init_rng(global_id.xy, scene.frameCount + i); // Offset seed effectively
+        
+        // Jitter for anti-aliasing (optional, but good for convergence)
+        // Re-calculating uv with jitter would be better, but for now let's just trace
+        // standard path with different random numbers in ray_color
+        
+        // Note: ray_color uses global state 'seed' which is modified by rand() calls.
+        // We need to re-seed or let it continue? 
+        // Best approach: Just call ray_color multiple times.
+        // But ray_color modifies state. So subsequent calls are random.
+        // However, 'u' and 'v' above are constant for this pixel.
+        // Ideally we should jitter u/v inside the loop for AA.
+        // For simpler implementation now: just jitter the path (ray_color does that).
+        
+        accumulated_color += ray_color(r_base);
+    }
+    
+    var pixel_color = accumulated_color / f32(scene.raysPerFrame);
 
     // Accumulation
     // Read from historyTex (texture_2d, need load with mip level 0, coords are integers)
@@ -213,7 +236,11 @@ fn main(@builtin(global_invocation_id) global_id: vec3u) {
     
     var final_color = pixel_color;
     if (frame_count > 0.0) {
-       let weight = 1.0 / (frame_count + 1.0);
+       // frame_count is previous total rays.
+       // We just added raysPerFrame rays.
+       // Current total = frame_count + raysPerFrame
+       // Weight for new batch = raysPerFrame / (frame_count + raysPerFrame)
+       let weight = f32(scene.raysPerFrame) / (frame_count + f32(scene.raysPerFrame));
        final_color = mix(old_color.rgb, pixel_color, weight);
     }
     
