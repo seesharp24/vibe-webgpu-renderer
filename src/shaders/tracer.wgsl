@@ -12,6 +12,8 @@ struct Sphere {
     emission: vec3f,
     roughness: f32,
     metallic: f32,
+    transmission: f32,
+    ior: f32,
 };
 
 struct Triangle {
@@ -22,6 +24,8 @@ struct Triangle {
     emission: vec3f,
     roughness: f32,
     metallic: f32,
+    transmission: f32,
+    ior: f32,
 };
 
 struct HitRecord {
@@ -33,6 +37,8 @@ struct HitRecord {
     emission: vec3f,
     roughness: f32,
     metallic: f32,
+    transmission: f32,
+    ior: f32,
 };
 
 struct SceneUniforms {
@@ -113,6 +119,8 @@ fn hit_sphere(s: Sphere, r: Ray, t_min: f32, t_max: f32) -> HitRecord {
     rec.emission = s.emission;
     rec.roughness = s.roughness;
     rec.metallic = s.metallic;
+    rec.transmission = s.transmission;
+    rec.ior = s.ior;
     return rec;
 }
 
@@ -160,24 +168,26 @@ fn hit_triangle(tri: Triangle, r: Ray, t_min: f32, t_max: f32) -> HitRecord {
     rec.emission = tri.emission;
     rec.roughness = tri.roughness;
     rec.metallic = tri.metallic;
+    rec.transmission = tri.transmission;
+    rec.ior = tri.ior;
     return rec;
 }
 
-fn hit_quad(v0: vec3f, v1: vec3f, v2: vec3f, v3: vec3f, color: vec3f, emission: vec3f, roughness: f32, metallic: f32, r: Ray, t_min: f32, t_max: f32, closest_so_far: f32) -> HitRecord {
+fn hit_quad(v0: vec3f, v1: vec3f, v2: vec3f, v3: vec3f, color: vec3f, emission: vec3f, roughness: f32, metallic: f32, transmission: f32, ior: f32, r: Ray, t_min: f32, t_max: f32, closest_so_far: f32) -> HitRecord {
     // Quad defined by v0, v1, v2, v3 (CCW or CW).
     // Split into two triangles: v0-v1-v2 and v0-v2-v3
     var final_rec: HitRecord;
     final_rec.matched = false;
     var current_closest = closest_so_far;
 
-    let t1 = Triangle(v0, v1, v2, color, emission, roughness, metallic);
+    let t1 = Triangle(v0, v1, v2, color, emission, roughness, metallic, transmission, ior);
     let rec1 = hit_triangle(t1, r, t_min, current_closest);
     if (rec1.matched) {
         final_rec = rec1;
         current_closest = rec1.t;
     }
 
-    let t2 = Triangle(v0, v2, v3, color, emission, roughness, metallic);
+    let t2 = Triangle(v0, v2, v3, color, emission, roughness, metallic, transmission, ior);
     let rec2 = hit_triangle(t2, r, t_min, current_closest);
     if (rec2.matched) {
         final_rec = rec2;
@@ -211,35 +221,35 @@ fn hit_world(r: Ray, t_min: f32, t_max: f32) -> HitRecord {
     // Floor (y=0) - White, Rough
     let rec_floor = hit_quad(
         vec3f(-1.0, 0.0, 1.0), vec3f(1.0, 0.0, 1.0), vec3f(1.0, 0.0, -1.0), vec3f(-1.0, 0.0, -1.0),
-        white, vec3f(0.0), 1.0, 0.0, r, t_min, t_max, closest_so_far
+        white, vec3f(0.0), 1.0, 0.0, 0.0, 1.5, r, t_min, t_max, closest_so_far
     );
     if (rec_floor.matched) { closest_so_far = rec_floor.t; final_rec = rec_floor; }
     
     // Ceiling (y=2) - White, Rough
     let rec_ceil = hit_quad(
         vec3f(-1.0, 2.0, -1.0), vec3f(1.0, 2.0, -1.0), vec3f(1.0, 2.0, 1.0), vec3f(-1.0, 2.0, 1.0),
-        white, vec3f(0.0), 1.0, 0.0, r, t_min, t_max, closest_so_far
+        white, vec3f(0.0), 1.0, 0.0, 0.0, 1.5, r, t_min, t_max, closest_so_far
     );
     if (rec_ceil.matched) { closest_so_far = rec_ceil.t; final_rec = rec_ceil; }
     
     // Back Wall (z=-1) - White, Rough
     let rec_back = hit_quad(
         vec3f(-1.0, 0.0, -1.0), vec3f(1.0, 0.0, -1.0), vec3f(1.0, 2.0, -1.0), vec3f(-1.0, 2.0, -1.0),
-        white, vec3f(0.0), 1.0, 0.0, r, t_min, t_max, closest_so_far
+        white, vec3f(0.0), 1.0, 0.0, 0.0, 1.5, r, t_min, t_max, closest_so_far
     );
     if (rec_back.matched) { closest_so_far = rec_back.t; final_rec = rec_back; }
     
     // Left Wall (x=-1) - Red, Rough
     let rec_left = hit_quad(
         vec3f(-1.0, 0.0, 1.0), vec3f(-1.0, 0.0, -1.0), vec3f(-1.0, 2.0, -1.0), vec3f(-1.0, 2.0, 1.0),
-        red, vec3f(0.0), 1.0, 0.0, r, t_min, t_max, closest_so_far
+        red, vec3f(0.0), 1.0, 0.0, 0.0, 1.5, r, t_min, t_max, closest_so_far
     );
     if (rec_left.matched) { closest_so_far = rec_left.t; final_rec = rec_left; }
     
     // Right Wall (x=1) - Green, Rough
     let rec_right = hit_quad(
         vec3f(1.0, 0.0, -1.0), vec3f(1.0, 0.0, 1.0), vec3f(1.0, 2.0, 1.0), vec3f(1.0, 2.0, -1.0),
-        green, vec3f(0.0), 1.0, 0.0, r, t_min, t_max, closest_so_far
+        green, vec3f(0.0), 1.0, 0.0, 0.0, 1.5, r, t_min, t_max, closest_so_far
     );
     if (rec_right.matched) { closest_so_far = rec_right.t; final_rec = rec_right; }
     
@@ -248,17 +258,65 @@ fn hit_world(r: Ray, t_min: f32, t_max: f32) -> HitRecord {
     let rec_light = hit_quad(
         vec3f(-light_size/2.0, 1.99, -light_size/2.0), vec3f(light_size/2.0, 1.99, -light_size/2.0),
         vec3f(light_size/2.0, 1.99, light_size/2.0), vec3f(-light_size/2.0, 1.99, light_size/2.0),
-        vec3f(0.0), light, 1.0, 0.0, r, t_min, t_max, closest_so_far
+        vec3f(0.0), light, 1.0, 0.0, 0.0, 1.5, r, t_min, t_max, closest_so_far
     );
     if (rec_light.matched) { closest_so_far = rec_light.t; final_rec = rec_light; }
 
-    // Sphere 1 (Mirror-like Gold)
-    let s1 = Sphere(vec3f(-0.4, 0.4, -0.3), 0.4, vec3f(1.0, 0.71, 0.29), vec3f(0.0), 0.1, 1.0); 
-    let rec_s1 = hit_sphere(s1, r, t_min, closest_so_far);
-    if (rec_s1.matched) { closest_so_far = rec_s1.t; final_rec = rec_s1; }
+    // Cube (Left) - Frosted Glass
+    // Center: (-0.4, 0.4, -0.3), Size: 0.6
+    let c_min = vec3f(-0.7, 0.1, -0.6);
+    let c_max = vec3f(-0.1, 0.7, 0.0);
+    
+    // Front Face (z = c_max.z)
+    let q1 = hit_quad(
+        vec3f(c_min.x, c_min.y, c_max.z), vec3f(c_max.x, c_min.y, c_max.z), 
+        vec3f(c_max.x, c_max.y, c_max.z), vec3f(c_min.x, c_max.y, c_max.z),
+        white, vec3f(0.0), 0.2, 0.0, 1.0, 1.5, r, t_min, t_max, closest_so_far
+    );
+    if (q1.matched) { closest_so_far = q1.t; final_rec = q1; }
 
-    // Sphere 2 (Glossy Blue Plastic)
-    let s2 = Sphere(vec3f(0.4, 0.4, 0.3), 0.4, vec3f(0.2, 0.2, 0.8), vec3f(0.0), 0.05, 0.0);
+    // Back Face (z = c_min.z)
+    let q2 = hit_quad(
+        vec3f(c_min.x, c_min.y, c_min.z), vec3f(c_min.x, c_max.y, c_min.z),
+        vec3f(c_max.x, c_max.y, c_min.z), vec3f(c_max.x, c_min.y, c_min.z),
+        white, vec3f(0.0), 0.2, 0.0, 1.0, 1.5, r, t_min, t_max, closest_so_far
+    );
+    if (q2.matched) { closest_so_far = q2.t; final_rec = q2; }
+
+    // Right Face (x = c_max.x)
+    let q3 = hit_quad(
+        vec3f(c_max.x, c_min.y, c_max.z), vec3f(c_max.x, c_min.y, c_min.z),
+        vec3f(c_max.x, c_max.y, c_min.z), vec3f(c_max.x, c_max.y, c_max.z),
+        white, vec3f(0.0), 0.2, 0.0, 1.0, 1.5, r, t_min, t_max, closest_so_far
+    );
+    if (q3.matched) { closest_so_far = q3.t; final_rec = q3; }
+
+    // Left Face (x = c_min.x)
+    let q4 = hit_quad(
+        vec3f(c_min.x, c_min.y, c_max.z), vec3f(c_min.x, c_max.y, c_max.z),
+        vec3f(c_min.x, c_max.y, c_min.z), vec3f(c_min.x, c_min.y, c_min.z),
+        white, vec3f(0.0), 0.2, 0.0, 1.0, 1.5, r, t_min, t_max, closest_so_far
+    );
+    if (q4.matched) { closest_so_far = q4.t; final_rec = q4; }
+
+    // Top Face (y = c_max.y)
+    let q5 = hit_quad(
+        vec3f(c_min.x, c_max.y, c_max.z), vec3f(c_max.x, c_max.y, c_max.z),
+        vec3f(c_max.x, c_max.y, c_min.z), vec3f(c_min.x, c_max.y, c_min.z),
+        white, vec3f(0.0), 0.2, 0.0, 1.0, 1.5, r, t_min, t_max, closest_so_far
+    );
+    if (q5.matched) { closest_so_far = q5.t; final_rec = q5; }
+
+    // Bottom Face (y = c_min.y)
+    let q6 = hit_quad(
+        vec3f(c_min.x, c_min.y, c_max.z), vec3f(c_min.x, c_min.y, c_min.z),
+        vec3f(c_max.x, c_min.y, c_min.z), vec3f(c_max.x, c_min.y, c_max.z),
+        white, vec3f(0.0), 0.2, 0.0, 1.0, 1.5, r, t_min, t_max, closest_so_far
+    );
+    if (q6.matched) { closest_so_far = q6.t; final_rec = q6; }
+
+    // Sphere 2 (Right) - Clear Glass
+    let s2 = Sphere(vec3f(0.4, 0.4, 0.3), 0.4, vec3f(1.0, 1.0, 1.0), vec3f(0.0), 0.0, 0.0, 1.0, 1.5);
     let rec_s2 = hit_sphere(s2, r, t_min, closest_so_far);
     if (rec_s2.matched) { closest_so_far = rec_s2.t; final_rec = rec_s2; }
     
@@ -293,6 +351,13 @@ fn sample_ggx(n: vec3f, roughness: f32, r1: f32, r2: f32) -> vec3f {
     return normalize(basis * h); // World space
 }
 
+fn refract(uv: vec3f, n: vec3f, etai_over_etat: f32) -> vec3f {
+    let cos_theta = min(dot(-uv, n), 1.0);
+    let r_out_perp = etai_over_etat * (uv + cos_theta * n);
+    let r_out_parallel = -sqrt(abs(1.0 - dot(r_out_perp, r_out_perp))) * n;
+    return r_out_perp + r_out_parallel;
+}
+
 fn ray_color(r_in: Ray) -> vec3f {
     var r = r_in;
     var attenuation = vec3f(1.0);
@@ -302,75 +367,129 @@ fn ray_color(r_in: Ray) -> vec3f {
     for (var i = 0u; i < 5u; i++) {
         let rec = hit_world(r, 0.001, 10000.0);
         if (rec.matched) {
-            // Emitted light from hit object
+            // Emitted light
             accumulated_light += attenuation * rec.emission;
             
-            // PBR Logic
-            // Based on metallic/roughness
-            
+            // Material properties
             let normal = rec.normal;
             let view_dir = normalize(-r.direction);
             var albedo = rec.color;
             let roughness = rec.roughness;
             let metallic = rec.metallic;
+            let transmission = rec.transmission;
+            let ior = rec.ior;
             
-            // Base F0
+            // Variables for scatter calc
+            var scatter_dir: vec3f;
+            var current_attenuation = vec3f(1.0);
+            
+            // Detect if we are inside the object
+            let front_face = dot(r.direction, rec.normal) < 0.0;
+            var real_normal = rec.normal;
+            var refraction_ratio = 1.0 / ior;
+            if (!front_face) {
+                real_normal = -rec.normal;
+                refraction_ratio = ior;
+            }
+
+            // Probability for lobes
+            // Simple priority: Metallic -> Transmissive -> Diffuse
+            
+            // Fresnel (Schlick)
+            // Use base F0 for dielectric (0.04) or albedo (for metal)
             var f0 = vec3f(0.04); 
             f0 = mix(f0, albedo, metallic);
             
-            // Probabilities
-            // Fresnel at normal incidence for choosing specular/diffuse
-            // Approximate fresnel for importance sampling weight
-            let F = schlick_fresnel(max(dot(normal, view_dir), 0.0), f0);
+            let cos_theta = min(dot(-r.direction, real_normal), 1.0);
+            let F = schlick_fresnel(cos_theta, f0);
             
-            // Simple logic: Metallic surfaces are 100% specular (tinted F0)
-            // Dielectrics are Mix(Specular, Diffuse) based on Fresnel.
-            // But doing full importance sampling of both lobes is complex.
-            // Let's normalize probability.
-            let prob_spec = (F.x + F.y + F.z) / 3.0;
-            // Boost specular probability
-            let sample_specular = (rand() < prob_spec) || (metallic > 0.5); 
+            // Reflection Probability via Fresnel
+            // For dielectrics, F determines Reflect vs Refract
+            let p_reflect_fresnel = (F.x + F.y + F.z) / 3.0;
             
-            var scatter_dir: vec3f;
-            
-            if (sample_specular) {
-                 // Sample GGX
-                 let h = sample_ggx(normal, roughness, rand(), rand());
+            // 1. Check for Metal
+            if (metallic > 0.5) {
+                 // Metal is always specular reflection
+                 // Roughness jitter
+                 let h = sample_ggx(real_normal, roughness, rand(), rand());
                  scatter_dir = reflect(-view_dir, h);
-                 
-                 if (dot(scatter_dir, normal) <= 0.0) {
-                     // Absorbed
-                     break;
-                 }
-                 
-                 // If we chose specular based on F, we divide by F ~? 
-                 // Simple path tracing logic for throughput:
-                 if (metallic > 0.5) {
-                     attenuation *= albedo; 
-                 } else {
-                     attenuation *= vec3f(1.0); // Specular highlight is white for dielectrics
-                 }
-            } else {
-                // Diffuse (Lambertian)
-                let diffuse_target = rec.p + normal + random_unit_vector();
-                scatter_dir = normalize(diffuse_target - rec.p);
+                 current_attenuation = albedo; // Metals absorb based on color
+            } 
+            // 2. Check for Transmission (Glass)
+            else if (transmission > 0.0) {
+                // Glass / Dielectric
                 
-                // Attenuation is albedo
-                attenuation *= albedo;
+                // Russian Roulette: Reflect or Refract?
+                // Probability to reflect increases with Fresnel
+                let do_reflect = (rand() < p_reflect_fresnel);
+                
+                if (do_reflect) {
+                     // Specular Reflection
+                     // Sample GGX for roughness (Frosted Glass Reflection)
+                     let h = sample_ggx(real_normal, roughness, rand(), rand());
+                     scatter_dir = reflect(-view_dir, h);
+                     current_attenuation = vec3f(1.0); // No tint on dielectric reflection
+                } else {
+                    // Refraction
+                    // Frosted Glass Refraction: Jitter the normal or ray?
+                    // Jittering the normal using GGX distribution basically works
+                    // similar to microfacet refraction.
+                    
+                    let h = sample_ggx(real_normal, roughness, rand(), rand());
+                    // Refract around microfacet normal
+                    // Note: Check for total internal reflection inside refract?
+                    // Our refract func assumes it's possible or valid?
+                    // If TIR happens, we must reflect.
+                    
+                    // Check TIR manually or inside?
+                    // sin_theta = etai_over_etat * sqrt(1 - cos^2)
+                    let sin_theta = sqrt(1.0 - cos_theta*cos_theta);
+                     if (refraction_ratio * sin_theta > 1.0) {
+                         // Must Reflect (TIR)
+                         scatter_dir = reflect(r.direction, real_normal); // or h?
+                         // Ideally use h, but keep it simple
+                     } else {
+                         // Refract
+                         // Use h instead of real_normal for frosted effect
+                         // But we need to be careful about h facing.
+                         // For now, simplify: refract with real_normal, then add roughness fuzz?
+                         // OR use h for refraction too.
+                         scatter_dir = refract(normalize(r.direction), h, refraction_ratio);
+                     }
+                     current_attenuation = albedo; // Tint glass on transmission
+                }
+            }
+            // 3. Diffuse / Glossy Plastic
+            else {
+                // Dielectric (Plastic/Matte)
+                // Mix Specular and Diffuse based on Fresnel
+                let prob_spec = p_reflect_fresnel; 
+                let sample_specular = (rand() < prob_spec);
+                
+                if (sample_specular) {
+                     let h = sample_ggx(real_normal, roughness, rand(), rand());
+                     scatter_dir = reflect(-view_dir, h);
+                     current_attenuation = vec3f(1.0); // White highlight
+                } else {
+                    // Diffuse
+                    let diffuse_target = rec.p + real_normal + random_unit_vector();
+                    scatter_dir = normalize(diffuse_target - rec.p);
+                    current_attenuation = albedo;
+                }
             }
             
             r.origin = rec.p;
             r.direction = scatter_dir;
+            attenuation *= current_attenuation;
             
             // Russian Roulette for termination
             if (length(attenuation) < 0.001) {
                 break;
             }
         } else {
-            // Sky background (Darker now to emphasize box lighting)
-            // accumulated_light += attenuation * sky;
-            accumulated_light += vec3f(0.0); // Pitch black void outside box
-            break; // Exit loop
+            // Sky
+            accumulated_light += vec3f(0.0);
+            break; 
         }
     }
     return accumulated_light;

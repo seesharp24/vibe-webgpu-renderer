@@ -88,7 +88,9 @@ export class Renderer {
             @fragment
             fn fs_main(@builtin(position) FragCoord : vec4f) -> @location(0) vec4f {
                 let coords = vec2i(floor(FragCoord.xy));
-                return textureLoad(myTexture, coords, 0);
+                let color = textureLoad(myTexture, coords, 0);
+                let corrected = pow(color.rgb, vec3f(1.0/2.2));
+                return vec4f(corrected, color.a);
             }
         `;
         const blitModule = this.device.createShaderModule({ code: blitShaderCode });
