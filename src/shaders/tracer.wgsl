@@ -71,18 +71,13 @@ fn rand() -> f32 {
     return f32(seed) / 4294967296.0;
 }
 
-fn random_in_unit_sphere() -> vec3f {
-    for (var i = 0u; i < 10u; i++) {
-        let p = vec3f(rand(), rand(), rand()) * 2.0 - vec3f(1.0);
-        if (dot(p, p) < 1.0) {
-            return p;
-        }
-    }
-    return normalize(vec3f(rand() - 0.5, rand() - 0.5, rand() - 0.5));
-}
-
 fn random_unit_vector() -> vec3f {
-    return normalize(random_in_unit_sphere());
+    let z = rand() * 2.0 - 1.0;
+    let a = rand() * 2.0 * 3.14159265;
+    let r = sqrt(max(0.0, 1.0 - z * z));
+    let x = r * cos(a);
+    let y = r * sin(a);
+    return vec3f(x, y, z);
 }
 
 // Intersections
@@ -199,59 +194,74 @@ fn hit_quad(v0: vec3f, v1: vec3f, v2: vec3f, v3: vec3f, color: vec3f, emission: 
 
 // Scene Helper
 fn hit_box(c_min: vec3f, c_max: vec3f, color: vec3f, emission: vec3f, roughness: f32, metallic: f32, transmission: f32, ior: f32, r: Ray, t_min: f32, t_max: f32, closest_so_far: f32) -> HitRecord {
-    var final_rec: HitRecord;
-    final_rec.matched = false;
-    var current_closest = closest_so_far;
+    var rec: HitRecord;
+    rec.matched = false;
 
-    // Front (Z max)
-    let q1 = hit_quad(
-        vec3f(c_min.x, c_min.y, c_max.z), vec3f(c_max.x, c_min.y, c_max.z), 
-        vec3f(c_max.x, c_max.y, c_max.z), vec3f(c_min.x, c_max.y, c_max.z),
-        color, emission, roughness, metallic, transmission, ior, r, t_min, t_max, current_closest
-    );
-    if (q1.matched) { current_closest = q1.t; final_rec = q1; }
+    let inv_d = 1.0 / r.direction;
+    let t0s = (c_min - r.origin) * inv_d;
+    let t1s = (c_max - r.origin) * inv_d;
 
-    // Back (Z min)
-    let q2 = hit_quad(
-        vec3f(c_min.x, c_min.y, c_min.z), vec3f(c_min.x, c_max.y, c_min.z),
-        vec3f(c_max.x, c_max.y, c_min.z), vec3f(c_max.x, c_min.y, c_min.z),
-        color, emission, roughness, metallic, transmission, ior, r, t_min, t_max, current_closest
-    );
-    if (q2.matched) { current_closest = q2.t; final_rec = q2; }
+    let t_smaller = min(t0s, t1s);
+    let t_larger  = max(t0s, t1s);
 
-    // Right (X max)
-    let q3 = hit_quad(
-        vec3f(c_max.x, c_min.y, c_max.z), vec3f(c_max.x, c_min.y, c_min.z),
-        vec3f(c_max.x, c_max.y, c_min.z), vec3f(c_max.x, c_max.y, c_max.z),
-        color, emission, roughness, metallic, transmission, ior, r, t_min, t_max, current_closest
-    );
-    if (q3.matched) { current_closest = q3.t; final_rec = q3; }
+    let t_enter = max(max(t_smaller.x, t_smaller.y), t_smaller.z);
+    let t_exit  = min(min(t_larger.x, t_larger.y), t_larger.z);
 
-    // Left (X min)
-    let q4 = hit_quad(
-        vec3f(c_min.x, c_min.y, c_max.z), vec3f(c_min.x, c_max.y, c_max.z),
-        vec3f(c_min.x, c_max.y, c_min.z), vec3f(c_min.x, c_min.y, c_min.z),
-        color, emission, roughness, metallic, transmission, ior, r, t_min, t_max, current_closest
-    );
-    if (q4.matched) { current_closest = q4.t; final_rec = q4; }
+    if (t_exit < t_enter || t_exit < t_min) {
+        return rec;
+    }
+    
+    // We want the closest hit in [t_min, closest_so_far]
+    // Candidates are t_enter (if > t_min) or t_exit (if inside and t_exit > t_min)
+    // Actually standard AABB: if ray origin is outside, hit is t_enter. If inside, hit is t_exit (if we want to see inside faces).
+    // Our ray tracer logic usually wants the first hit.
+    
+    var t_hit = t_enter;
+    if (t_hit < t_min) {
+        t_hit = t_exit;
+        if (t_hit < t_min) {
+            return rec;
+        }
+    }
 
-    // Top (Y max)
-    let q5 = hit_quad(
-        vec3f(c_min.x, c_max.y, c_max.z), vec3f(c_max.x, c_max.y, c_max.z),
-        vec3f(c_max.x, c_max.y, c_min.z), vec3f(c_min.x, c_max.y, c_min.z),
-        color, emission, roughness, metallic, transmission, ior, r, t_min, t_max, current_closest
-    );
-    if (q5.matched) { current_closest = q5.t; final_rec = q5; }
+    if (t_hit >= closest_so_far) {
+        return rec;
+    }
 
-    // Bottom (Y min)
-    let q6 = hit_quad(
-        vec3f(c_min.x, c_min.y, c_max.z), vec3f(c_min.x, c_min.y, c_min.z),
-        vec3f(c_max.x, c_min.y, c_min.z), vec3f(c_max.x, c_min.y, c_max.z),
-        color, emission, roughness, metallic, transmission, ior, r, t_min, t_max, current_closest
-    );
-    if (q6.matched) { current_closest = q6.t; final_rec = q6; }
+    // Valid hit
+    rec.t = t_hit;
+    rec.p = r.origin + r.direction * t_hit;
+    rec.matched = true;
+    rec.color = color;
+    rec.emission = emission;
+    rec.roughness = roughness;
+    rec.metallic = metallic;
+    rec.transmission = transmission;
+    rec.ior = ior;
 
-    return final_rec;
+    // Normal calculation
+    // A robust way for AABB: compare hit point to bounds
+    // Or closer: see which plane t_hit came from.
+    // Since we know t_hit equals one of the slab planes...
+    let p = rec.p;
+    let epsilon = 0.0001;
+    var normal = vec3f(0.0);
+    
+    // Check against faces. Bias slightly outward or use abs diff
+    if (abs(p.x - c_min.x) < epsilon) { normal = vec3f(-1.0, 0.0, 0.0); }
+    else if (abs(p.x - c_max.x) < epsilon) { normal = vec3f(1.0, 0.0, 0.0); }
+    else if (abs(p.y - c_min.y) < epsilon) { normal = vec3f(0.0, -1.0, 0.0); }
+    else if (abs(p.y - c_max.y) < epsilon) { normal = vec3f(0.0, 1.0, 0.0); }
+    else if (abs(p.z - c_min.z) < epsilon) { normal = vec3f(0.0, 0.0, -1.0); }
+    else if (abs(p.z - c_max.z) < epsilon) { normal = vec3f(0.0, 0.0, 1.0); }
+    
+    // Ensure normal faces against ray? 
+    // Usually mathematical normal is outwards.
+    // The main loop handles flipping normal if inside (refraction code).
+    // So we invoke standard outward normal here.
+    rec.normal = normal;
+
+    return rec;
 }
 fn hit_world(r: Ray, t_min: f32, t_max: f32) -> HitRecord {
     var hit_anything = false;
@@ -273,6 +283,42 @@ fn hit_world(r: Ray, t_min: f32, t_max: f32) -> HitRecord {
     
     // Geometry
     
+    // Frosted Glass Cuboids & Control (Scaled 0.8x)
+    let glass_color = vec3f(1.0, 1.0, 1.0);
+    let frost_rough = 0.3;
+    let clear_rough = 0.0;
+    
+    // Y range for all: 0.001 to 0.8 (Lifted slightly to avoid z-fighting)
+    // Z range for all: -0.4 to 0.4 (Depth 0.8)
+    
+    // 1. Frosted (Width 0.32)
+    let b1 = hit_box(
+        vec3f(-0.68, 0.001, -0.4), vec3f(-0.36, 0.8, 0.4),
+        glass_color, vec3f(0.0), frost_rough, 0.0, 1.0, 1.5, r, t_min, t_max, closest_so_far
+    );
+    if (b1.matched) { closest_so_far = b1.t; final_rec = b1; }
+
+    // 2. Frosted (Width 0.16)
+    let b2 = hit_box(
+        vec3f(-0.32, 0.001, -0.4), vec3f(-0.16, 0.8, 0.4),
+        glass_color, vec3f(0.0), frost_rough, 0.0, 1.0, 1.5, r, t_min, t_max, closest_so_far
+    );
+    if (b2.matched) { closest_so_far = b2.t; final_rec = b2; }
+
+    // 3. Frosted (Width 0.08)
+    let b3 = hit_box(
+        vec3f(-0.12, 0.001, -0.4), vec3f(-0.04, 0.8, 0.4),
+        glass_color, vec3f(0.0), frost_rough, 0.0, 1.0, 1.5, r, t_min, t_max, closest_so_far
+    );
+    if (b3.matched) { closest_so_far = b3.t; final_rec = b3; }
+    
+    // 4. Control Clear (Width 0.8)
+    let b4 = hit_box(
+        vec3f(0.0, 0.001, -0.4), vec3f(0.8, 0.8, 0.4),
+        glass_color, vec3f(0.0), clear_rough, 0.0, 1.0, 1.5, r, t_min, t_max, closest_so_far
+    );
+    if (b4.matched) { closest_so_far = b4.t; final_rec = b4; }
+
     // Floor (y=0) - White, Rough
     let rec_floor = hit_quad(
         vec3f(-1.0, 0.0, 1.0), vec3f(1.0, 0.0, 1.0), vec3f(1.0, 0.0, -1.0), vec3f(-1.0, 0.0, -1.0),
@@ -317,41 +363,7 @@ fn hit_world(r: Ray, t_min: f32, t_max: f32) -> HitRecord {
     );
     if (rec_light.matched) { closest_so_far = rec_light.t; final_rec = rec_light; }
 
-    // Frosted Glass Cuboids & Control (Scaled 0.8x)
-    let glass_color = vec3f(1.0, 1.0, 1.0);
-    let frost_rough = 0.3;
-    let clear_rough = 0.0;
-    
-    // Y range for all: 0.0 to 0.8
-    // Z range for all: -0.4 to 0.4 (Depth 0.8)
-    
-    // 1. Frosted (Width 0.32)
-    let b1 = hit_box(
-        vec3f(-0.68, 0.0, -0.4), vec3f(-0.36, 0.8, 0.4),
-        glass_color, vec3f(0.0), frost_rough, 0.0, 1.0, 1.5, r, t_min, t_max, closest_so_far
-    );
-    if (b1.matched) { closest_so_far = b1.t; final_rec = b1; }
 
-    // 2. Frosted (Width 0.16)
-    let b2 = hit_box(
-        vec3f(-0.32, 0.0, -0.4), vec3f(-0.16, 0.8, 0.4),
-        glass_color, vec3f(0.0), frost_rough, 0.0, 1.0, 1.5, r, t_min, t_max, closest_so_far
-    );
-    if (b2.matched) { closest_so_far = b2.t; final_rec = b2; }
-
-    // 3. Frosted (Width 0.08)
-    let b3 = hit_box(
-        vec3f(-0.12, 0.0, -0.4), vec3f(-0.04, 0.8, 0.4),
-        glass_color, vec3f(0.0), frost_rough, 0.0, 1.0, 1.5, r, t_min, t_max, closest_so_far
-    );
-    if (b3.matched) { closest_so_far = b3.t; final_rec = b3; }
-    
-    // 4. Control Clear (Width 0.8)
-    let b4 = hit_box(
-        vec3f(0.0, 0.0, -0.4), vec3f(0.8, 0.8, 0.4),
-        glass_color, vec3f(0.0), clear_rough, 0.0, 1.0, 1.5, r, t_min, t_max, closest_so_far
-    );
-    if (b4.matched) { closest_so_far = b4.t; final_rec = b4; }
     
     return final_rec;
 }
