@@ -6,7 +6,7 @@ export class Renderer {
         this.device = null;
         this.context = null;
         this.frameIndex = 0;
-        this.raysPerFrame = 25;
+        this.raysPerFrame = 2;
         this.totalSamples = 0;
 
         // Pipelines and resources
